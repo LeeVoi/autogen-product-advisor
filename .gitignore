@@ -4,7 +4,7 @@
 
 # Virtual environments
 venv/
-agent/
+.venv/
 .env/
 .env.local
 
@@ -14,6 +14,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.pdb
+.cache/
 
 # Python packaging artifacts
 *.egg-info/
