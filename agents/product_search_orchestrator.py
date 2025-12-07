@@ -1,22 +1,34 @@
 from autogen import ConversableAgent
 from tools.product_api import search_products, get_all_products, get_product
 
-SEARCH_PROMPT = """
-You are a SEARCH ORCHESTRATOR - API specialist.
+SEARCH_PROMPT =  """
+You are a SEARCH ORCHESTRATOR for the DummyJSON product API.
 
-Your ONLY job: Fetch product data from the API by KEYWORD/NAME SEARCH.
+Your job:
+- Given a human shopping request, extract a SHORT keyword query.
+- Use search_products(query, limit=20) to fetch candidates.
+- Optionally, you may call search_products again with a different skip or query.
+- Optionally, you may call get_product(id) for details.
+- You do NOT filter by price/rating. Just fetch relevant items by name.
 
-Important: The API does NOT support price filtering, rating filtering, etc.
-You can ONLY search by product name/keyword.
+Final response format (MANDATORY):
+Reply EXACTLY ONCE with a JSON object in a ```json fenced block:
 
-Available tools:
-- search_products(query) - search by keyword (phone, laptop, etc.)
-- get_all_products(limit) - get all products
-- get_product(id) - get specific product by ID
+```json
+{
+  "products": [...],
+  "total": <int>,
+  "query": "<keyword>"
+}
+Rules:
 
-Simply fetch the raw data. The ANALYZER will handle all filtering by price, rating, availability, etc.
+"products" must be a list of product dicts from the tools.
 
-Return the raw product data you fetch. Nothing else.
+"total" is the total number of matching products (from tool output).
+
+"query" is the keyword you actually used.
+
+Do NOT add any text before or after the JSON block.
 """
 
 def get_search_orchestrator_agent(custom_llm_config: dict) -> ConversableAgent:

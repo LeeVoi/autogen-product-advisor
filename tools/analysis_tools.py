@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 import statistics
+import re
 
 
 def score_product(product: Dict[str, Any]) -> float:
@@ -78,3 +79,109 @@ def compare_products(p1: Dict[str, Any], p2: Dict[str, Any]) -> Dict[str, Any]:
             "score": score_product(p2),
         },
     }
+
+
+def parse_constraints(query: str) -> Dict[str, Any]:
+    """
+    Parse user query into constraints.
+    Supports:
+    - price_max: under/less than/<=/</around $X
+    - rating_min: >= / at least / no less than X
+    - category_in: smartphones/phones/mobile if mentioned
+    - availability: in stock / out of stock / low stock
+    - brand_in: simple list of known brands found in query
+    - count: top N or 'N items/products/phones'
+    """
+    q = query.lower()
+    constraints: Dict[str, Any] = {}
+
+    # price_max
+    m_price = re.search(r"(under|less than|<=|<|around)\s*\$?\s*(\d+(\.\d+)?)", q)
+    if m_price:
+        constraints["price_max"] = float(m_price.group(2))
+
+    # rating_min
+    m_rating_ge = re.search(r"(?:>=|at least|no less than)\s*(\d+(\.\d+)?)", q)
+    if m_rating_ge:
+        constraints["rating_min"] = float(m_rating_ge.group(1))
+    else:
+        m_rating_plain = re.search(r"rating\s*(?:>=|>|at least|no less than)?\s*(\d+(\.\d+)?)", q)
+        if m_rating_plain:
+            constraints["rating_min"] = float(m_rating_plain.group(1))
+
+    # category_in
+    if any(w in q for w in ("smartphone", "smartphones", "phone", "phones")):
+        constraints["category_in"] = {"smartphones", "phones", "mobile"}
+
+    # availability
+    if "in stock" in q:
+        constraints["availability"] = "in stock"
+    elif "out of stock" in q:
+        constraints["availability"] = "out of stock"
+    elif "low stock" in q:
+        constraints["availability"] = "low stock"
+
+    # brand_in
+    brands = ["apple", "samsung", "oppo", "realme", "vivo", "xiaomi", "oneplus", "google", "nokia", "motorola"]
+    for b in brands:
+        if b in q:
+            constraints.setdefault("brand_in", set()).add(b.capitalize())
+
+    # count
+    m_count = re.search(r"(top\s*(\d+)|\b(\d+)\s*(items|products|phones))", q)
+    if m_count:
+        num = m_count.group(2) or m_count.group(3)
+        if num and num.isdigit():
+            constraints["count"] = int(num)
+
+    return constraints
+
+
+def filter_by_constraints(products: List[Dict[str, Any]], constraints: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Filter products using parsed constraints."""
+    def ok(p: Dict[str, Any]) -> bool:
+        # price_max
+        if "price_max" in constraints:
+            try:
+                if float(p.get("price", float("inf"))) > float(constraints["price_max"]):
+                    return False
+            except Exception:
+                return False
+
+        # rating_min
+        if "rating_min" in constraints:
+            try:
+                if float(p.get("rating", 0)) < float(constraints["rating_min"]):
+                    return False
+            except Exception:
+                return False
+
+        # category_in
+        if "category_in" in constraints:
+            cat = (p.get("category") or "").lower()
+            if cat not in constraints["category_in"]:
+                return False
+
+        # availability
+        if "availability" in constraints:
+            want = constraints["availability"].lower()
+            avail = (p.get("availabilityStatus") or "").lower()
+            if avail != want:
+                return False
+
+        # brand_in
+        if "brand_in" in constraints:
+            brand = (p.get("brand") or "")
+            if brand.capitalize() not in constraints["brand_in"]:
+                return False
+
+        return True
+
+    filtered = [p for p in products if ok(p)]
+
+    # count
+    count = constraints.get("count")
+    if isinstance(count, int) and count > 0:
+        filtered = filtered[:count]
+
+    return filtered

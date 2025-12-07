@@ -1,6 +1,13 @@
 # ---------------------------
 # Python project ignores
 # ---------------------------
+# debug files
+debug_analyzer_history.txt
+debug_constraints.txt
+debug_products_filtered.txt
+debug_products_parsed.txt
+debug_raw_search.txt
+debug_search_history.txt
 
 # Virtual environments
 venv/

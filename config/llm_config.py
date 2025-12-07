@@ -14,10 +14,18 @@ if not GEMINI_API_KEY:
 LLM_CONFIG = {
     "config_list": [
         {
-            "model": "gemini-2.5-flash",
+            "model": "gemini-2.5-flash-lite",
+            "api_type": "google",
             "api_key": GEMINI_API_KEY,
-            "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "api_rate_limit": 0.1,  # 10 requests per second
+            "max_retries": 1,
+            "num_predict": 1,
+            "repeat_penalty": 1.0,
             "stream": False,
+            "native_tool_calls": False,
+            "seed": 23,
+            "cache_seed": None,
+            "timeout": 30,
             # just to silence the pricing warning
             "price": [0.0, 0.0],
         }

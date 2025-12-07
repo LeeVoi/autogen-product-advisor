@@ -1,127 +1,192 @@
 import logging
-import sys
-from io import StringIO
+import json
 
 from config.llm_config import LLM_CONFIG
+
 from agents.product_search_orchestrator import get_search_orchestrator_agent
 from agents.product_analyzer_agent import get_product_analyzer_agent
+from agents.product_internal_critic_agent import get_product_internal_critic_agent
 from agents.tool_executor_agent import get_tool_executor
-from utils.output_formatter import (
-    parse_json_safely,
-    format_products_for_analyzer,
-    create_analyzer_prompt,
-)
 
-# Suppress ALL logging
-logging.basicConfig(level=logging.CRITICAL)
-logging.getLogger("autogen").setLevel(logging.CRITICAL)
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+from utils.output_formatter import extract_json_block, format_products_for_analyzer
+
+logging.basicConfig(level=logging.INFO)
 
 
-def extract_message(chat_history, agent_name: str) -> str:
-    """Return last non-empty message content from a specific agent."""
-    for msg in reversed(chat_history):
+def get_last_message_from(chat, agent_name: str) -> str:
+    """
+    Helper to pull the last message from a specific agent
+    in an Autogen ChatResult.
+    (Currently not used, but kept in case you want it later.)
+    """
+    for msg in reversed(chat.chat_history):
         if msg.get("name") == agent_name:
-            content = (msg.get("content") or "").strip()
-            if content and len(content) > 20:
-                return content
+            return msg.get("content") or ""
     return ""
 
 
-def main():
-    # Initialize agents quietly
-    old_stdout = sys.stdout
-    sys.stdout = StringIO()
-    search_orchestrator = get_search_orchestrator_agent(custom_llm_config=LLM_CONFIG)
-    product_analyzer = get_product_analyzer_agent(custom_llm_config=LLM_CONFIG)
-    tool_executor = get_tool_executor()
-    sys.stdout = old_stdout
+def parse_products_from_search(raw_text: str):
+    """
+    Takes a reply that contains a JSON block and returns the 'products' list.
+    """
+    block = extract_json_block(raw_text)
+    if not block:
+        return []
 
-    print("\n" + "="*70)
+    try:
+        data = json.loads(block)
+    except json.JSONDecodeError:
+        return []
+
+    products = data.get("products")
+    if isinstance(products, list):
+        return products
+    return []
+
+
+def print_banner():
+    print("\n" + "=" * 70)
     print("PRODUCT ADVISOR - Interactive Assistant")
-    print("="*70)
-    print("\nWelcome! I can help you find products matching your criteria.")
-    print("\nExample queries:")
-    print("  • Find me a phone around 200$ price")
-    print("  • Find 3 laptops good for gaming and development, under 1000 EUR")
-    print("  • I need a budget laptop under 500 EUR with 15+ inch screen")
-    print("  • Show me gaming headphones with good reviews")
-    print("\nType 'exit', 'quit', or 'q' to quit.\n")
+    print("=" * 70 + "\n")
+    print("Type 'exit', 'quit', or 'q' to quit.\n")
+
+
+def main():
+    # --- Create agents ---
+    search_agent = get_search_orchestrator_agent(custom_llm_config=LLM_CONFIG)
+    analyzer_agent = get_product_analyzer_agent(custom_llm_config=LLM_CONFIG)
+    critic_agent = get_product_internal_critic_agent(custom_llm_config=LLM_CONFIG)
+    tool_executor = get_tool_executor()
+
+    print_banner()
 
     while True:
+        user_input = input("You: ").strip()
+        if user_input.lower() in ("exit", "quit", "q"):
+            print("\nGoodbye!\n")
+            break
+
+        if not user_input:
+            continue
+
         try:
-            user_input = input("You: ").strip()
-            if user_input.lower() in ("exit", "quit", "q"):
-                print("\nThank you for using Product Advisor. Goodbye!")
-                break
-            if not user_input:
-                continue
-
-            print("\n" + "-"*70)
+            # -------------------------------------------------
+            # STEP 1: SEARCH (uses tools via tool_executor)
+            # -------------------------------------------------
+            print("\n" + "-" * 70)
             print("⏳ Processing your request...\n")
+            print("[Searching] Finding products...\n")
 
-            # Search (suppress stdout)
-            sys_sav = sys.stdout
-            sys.stdout = StringIO()
-            chat_search = tool_executor.initiate_chat(
-                search_orchestrator, message=user_input, max_turns=3
+            search_prompt = (
+                "User wants:\n"
+                f"{user_input}\n\n"
+                "Use a good keyword, search for products, and return JSON as specified."
             )
-            sys.stdout = sys_sav
 
-            raw_search = extract_message(chat_search.chat_history, "SearchOrchestrator")
+            chat_search = tool_executor.initiate_chat(
+                search_agent,
+                message=search_prompt,
+                max_turns=8,  # give orchestrator enough room to call tools & finish
+            )
 
-            # Temporary debug: write to file (no terminal spam)
-            try:
-                with open("search_debug.txt", "w", encoding="utf-8") as f:
-                    f.write(raw_search or "")
-            except:
-                pass
+            # --- Look for the latest JSON-ish message with "products" from ANY agent ---
+            search_text = ""
+            for msg in reversed(chat_search.chat_history):
+                content = msg.get("content") or ""
+                if not content:
+                    continue
+                if '"products"' in content or '"products":' in content or '{\n  "products"' in content:
+                    search_text = content
+                    break
 
-            if not raw_search:
-                print("❌ No products found. Try a different search.\n")
+            if not search_text:
+                print("⚠️ Could not find any JSON results from the search agent.\n")
+                # Debug helper (uncomment if needed):
+                # for m in chat_search.chat_history:
+                #     print(m.get("name"), "=>", repr(m.get("content")))
                 continue
 
-            products = parse_json_safely(raw_search)
+            products = parse_products_from_search(search_text)
+
             if not products:
-                print("❌ Could not parse products. Try again.\n")
+                print("⚠️ Could not parse any products from the search response.\n")
+                print("Raw response:\n")
+                print(search_text)
+                print()
                 continue
+
+            # -------------------------------------------------
+            # STEP 2: ANALYZE (direct LLM call, NO tool_executor)
+            # -------------------------------------------------
+            print("[Analyzing] Ranking products...\n")
 
             products_text = format_products_for_analyzer(products)
-
-            # Analyze (suppress stdout)
-            analyzer_prompt = create_analyzer_prompt(user_input, products_text)
-            sys_sav = sys.stdout
-            sys.stdout = StringIO()
-            chat_analyzer = product_analyzer.initiate_chat(
-                tool_executor, message=analyzer_prompt, max_turns=1
+            analyzer_prompt = (
+                "USER REQUEST:\n"
+                f"{user_input}\n\n"
+                "CANDIDATE PRODUCTS:\n"
+                f"{products_text}\n\n"
+                "Based on the above, recommend 2–3 products following your output format."
             )
-            sys.stdout = sys_sav
 
-            # Extract analyzer reply (avoid prompt echo)
-            recommendations = ""
-            for msg in reversed(chat_analyzer.chat_history):
-                if msg.get("name") == "ProductAnalyzerAgent":
-                    content = (msg.get("content") or "").strip()
-                    if content and "PRODUCT #1" in content and "PRODUCT #3" in content:
-                        recommendations = content
-                        break
+            analyzer_msg = analyzer_agent.generate_reply(
+                messages=[{"role": "user", "content": analyzer_prompt}]
+            )
+            analyzer_result = (
+                analyzer_msg.get("content", "")
+                if isinstance(analyzer_msg, dict)
+                else str(analyzer_msg)
+            )
 
-            if not recommendations:
-                print("❌ Could not analyze products.\n")
+            if not analyzer_result.strip():
+                print("⚠️ Analyzer did not return any content.\n")
                 continue
 
-            print("="*70)
-            print("✨ TOP 3 RECOMMENDATIONS FOR YOU")
-            print("="*70 + "\n")
-            print(recommendations)
-            print("\n" + "="*70 + "\n")
+            # -------------------------------------------------
+            # STEP 3: CRITIC (direct LLM call, NO tool_executor)
+            # -------------------------------------------------
+            print("[Critic] Reviewing recommendations...\n")
+
+            critic_prompt = (
+                "User request:\n"
+                f"{user_input}\n\n"
+                "Analyzer recommendations:\n"
+                f"{analyzer_result}\n\n"
+                "Evaluate them according to your system message."
+            )
+
+            critic_msg = critic_agent.generate_reply(
+                messages=[{"role": "user", "content": critic_prompt}]
+            )
+            critic_result = (
+                critic_msg.get("content", "")
+                if isinstance(critic_msg, dict)
+                else str(critic_msg)
+            )
+
+            # -------------------------------------------------
+            # STEP 4: Print final result
+            # -------------------------------------------------
+            print("\n" + "=" * 70)
+            print("RECOMMENDED PRODUCTS")
+            print("=" * 70 + "\n")
+            print(analyzer_result.strip())
+
+            print("\n" + "=" * 70)
+            print("CRITIC REVIEW")
+            print("=" * 70 + "\n")
+            print(critic_result.strip() or "(No critic feedback)")
+
+            print("\n" + "-" * 70)
+            print("Ready for your next query.\n")
 
         except KeyboardInterrupt:
             print("\n\nInterrupted. Goodbye!")
             break
         except Exception as e:
-            print(f"\n❌ Error: {str(e)[:120]}")
+            print(f"\n❌ Error occurred: {e}")
+            import traceback
+            traceback.print_exc()
             print("Please try another query.\n")
 
 
