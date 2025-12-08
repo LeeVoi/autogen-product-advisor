@@ -47,9 +47,8 @@ python -m pip install -r requirements.txt
 #   GEMINI_API_KEY=YOUR_KEY_HERE
 ```
 
-If you prefer Vertex AI clients, `requirements.txt` already includes `vertexai` and `google-cloud-aiplatform`. Using Vertex requires additional GCP setup (project, auth, location) which is beyond the scope of this quick start.
-But these packages were added because it will throw an exception at runtime otherwise.
-
+`vertexai` and `google-cloud-aiplatform`, these packages were added because it will throw an exception at runtime otherwise.
+We do not directly use `vertexai`, but Some versions of autogen/autogen-agentchat (or this fork) may route “Google” API usage through Vertex clients or attempt optional imports for features, triggering the “please install …” exception unless vertexai/google-cloud-aiplatform are present.
 Exception caused by:
 `api_type: google`,
 
