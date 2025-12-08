@@ -47,6 +47,7 @@ autogen_cache/
 # ---------------------------
 .vscode/
 .history/
+.vs/
 
 # ---------------------------
 # Node modules

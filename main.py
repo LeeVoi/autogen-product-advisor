@@ -60,7 +60,7 @@ def print_banner():
 
 
 def main():
-    # --- Create agents ---
+    # Assign and create agents
     search_agent = get_search_orchestrator_agent(custom_llm_config=LLM_CONFIG)
     analyzer_agent = get_product_analyzer_agent(custom_llm_config=LLM_CONFIG)
     critic_agent = get_product_internal_critic_agent(custom_llm_config=LLM_CONFIG)
@@ -78,9 +78,9 @@ def main():
             continue
 
         try:
-            # -------------------------------------------------
-            # STEP 1: SEARCH (uses tools via tool_executor)
-            # -------------------------------------------------
+         
+            # Search via tool executor
+     
             print("\n" + "-" * 70)
             print("⏳ Processing your request...\n")
             print("[Searching] Finding products...\n")
@@ -97,7 +97,7 @@ def main():
                 max_turns=8,  # give orchestrator enough room to call tools & finish
             )
 
-            # --- Look for the latest JSON-ish message with "products" from ANY agent ---
+            # Look at last json message from any agent and extract products
             search_text = ""
             for msg in reversed(chat_search.chat_history):
                 content = msg.get("content") or ""
@@ -109,9 +109,6 @@ def main():
 
             if not search_text:
                 print("⚠️ Could not find any JSON results from the search agent.\n")
-                # Debug helper (uncomment if needed):
-                # for m in chat_search.chat_history:
-                #     print(m.get("name"), "=>", repr(m.get("content")))
                 continue
 
             products = parse_products_from_search(search_text)
@@ -123,9 +120,7 @@ def main():
                 print()
                 continue
 
-            # -------------------------------------------------
-            # STEP 2: ANALYZE (direct LLM call, NO tool_executor)
-            # -------------------------------------------------
+            #Analyze contents, direct LLM call
             print("[Analyzing] Ranking products...\n")
 
             products_text = format_products_for_analyzer(products)
@@ -150,9 +145,7 @@ def main():
                 print("⚠️ Analyzer did not return any content.\n")
                 continue
 
-            # -------------------------------------------------
-            # STEP 3: CRITIC (direct LLM call, NO tool_executor)
-            # -------------------------------------------------
+            #Critic grades contents also direct LLM call
             print("[Critic] Reviewing recommendations...\n")
 
             critic_prompt = (
@@ -172,9 +165,7 @@ def main():
                 else str(critic_msg)
             )
 
-            # -------------------------------------------------
-            # STEP 4: Print final result
-            # -------------------------------------------------
+            #Print result
             print("\n" + "=" * 70)
             print("RECOMMENDED PRODUCTS")
             print("=" * 70 + "\n")
