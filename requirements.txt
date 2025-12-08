@@ -1,6 +1,8 @@
 autogen-agentchat @ git+https://github.com/patrickstolc/autogen.git@0.2#egg=autogen-agentchat # AutoGen AgentChat extension (Forked)
 autogen==0.3.1 # Core AutoGen library
 google-generativeai # Required for Google Gemini API client
+vertexai # Vertex AI Python SDK
+google-cloud-aiplatform # Google Cloud AI Platform client library
 fix-busted-json==0.0.18 # For repairing malformed JSON responses
 python-dotenv==1.0.1  # For loading environment variables from .env files
 
