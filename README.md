@@ -13,6 +13,9 @@ Overview
 - The Product Analyzer selects 2–3 recommendations and explains the reasoning.
 - The Internal Critic reviews recommendations for clarity and constraint alignment.
 
+User cases can be found in:
+`docs/use_cases.md`
+
 Architecture
 - `agents/ProductSearchOrchestrator`: LLM agent that decides which product tools to call and must return a final ```json fenced block.
 - `agents/tool_executor_agent`: Executes tool calls (no analysis) and returns results to the orchestrator.
