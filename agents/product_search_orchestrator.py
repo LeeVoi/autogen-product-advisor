@@ -5,7 +5,7 @@ SEARCH_PROMPT =  """
 You are a SEARCH ORCHESTRATOR for the DummyJSON product API.
 
 Your job:
-- Given a human shopping request, extract a SHORT keyword query.
+- Given a human shopping request, extract a single SHORT keyword query.
 - Use search_products(query, limit=20) to fetch candidates.
 - Optionally, you may call search_products again with a different skip or query.
 - Optionally, you may call get_product(id) for details.
@@ -43,17 +43,17 @@ def get_search_orchestrator_agent(custom_llm_config: dict) -> ConversableAgent:
     # tool_executor will handle the actual execution
     agent.register_for_llm(
         name="search_products",
-        description="Search for products by keyword query. Returns a list of products with id, title, price, rating, description, discount, availability status, and reviews."
+        description="Search for products by keyword query. Returns a list of products with id, title, price, rating, description, discount, availability status, and reviews.",
     )(search_products)
     
     agent.register_for_llm(
         name="get_all_products",
-        description="Get all available products with pagination. Parameters: limit (default 30), skip (default 0). Returns list of products."
+        description="Get all available products with pagination. Parameters: limit (default 30), skip (default 0). Returns list of products.",
     )(get_all_products)
     
     agent.register_for_llm(
         name="get_product",
-        description="Get complete details for a specific product by its ID. Returns full product information including all metadata."
+        description="Get complete details for a specific product by its ID. Returns full product information including all metadata.",
     )(get_product)
     
     return agent

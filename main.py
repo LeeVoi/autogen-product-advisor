@@ -1,5 +1,6 @@
 import logging
 import json
+import warnings
 
 from config.llm_config import LLM_CONFIG
 
@@ -11,6 +12,13 @@ from agents.tool_executor_agent import get_tool_executor
 from utils.output_formatter import extract_json_block, format_products_for_analyzer
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="pydantic"
+)
+
 
 
 def get_last_message_from(chat, agent_name: str) -> str:
