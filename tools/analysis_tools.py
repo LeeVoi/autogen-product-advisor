@@ -2,6 +2,18 @@ from typing import List, Dict, Any
 import statistics
 import re
 
+"""
+NOTE: The functions in this file are no longer used by the analyzer
+in the current implementation. The file is kept for reference and
+for context as they are mentioned in the project report.
+
+originally, this file contained helper functions for filtering, scoring, and comparing products.
+These functions were registered as tools for the ProductAnalyzerAgent to help the agent if it chose to use them.
+
+In the final version of the system, we simplified the analyzer flow
+and removed this tool integration, but we kept the module to document
+the earlier design.
+"""
 
 def score_product(product: Dict[str, Any]) -> float:
     """
